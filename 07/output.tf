@@ -61,27 +61,17 @@ output "environment_info" {
 output "storage_info" {
   description = "Storage information from number type variable"
   value = {
-    disk_size_gb = var.storage_disk
-    disk_size_mb = var.storage_disk * 1024
+    disk_size_gb = var.storage_size
+    disk_size_mb = var.storage_size * 1024
     type         = "number"
-  }
-}
-
-output "deletion_policy" {
-  description = "Deletion policy from boolean type variable"
-  value = {
-    delete_on_termination = var.is_delete
-    policy_text           = var.is_delete ? "Volumes will be deleted" : "Volumes will be retained"
-    type                  = "bool"
   }
 }
 
 output "allowed_regions" {
   description = "Allowed regions from list type variable"
   value = {
-    regions      = var.allowed_locations
-    region_count = length(var.allowed_locations)
-    primary      = var.allowed_locations[0]
+    regions      = var.availability_zones
+    primary      = var.availability_zones
     type         = "list(string)"
   }
 }
@@ -89,10 +79,10 @@ output "allowed_regions" {
 output "tags_info" {
   description = "Tags from map type variable"
   value = {
-    tags       = var.resource_tags
-    tag_count  = length(keys(var.resource_tags))
-    tag_keys   = keys(var.resource_tags)
-    tag_values = values(var.resource_tags)
+    tags       = var.instance_tags
+    tag_count  = length(keys(var.instance_tags))
+    tag_keys   = keys(var.instance_tags)
+    tag_values = values(var.instance_tags)
     type       = "map(string)"
   }
 }
@@ -119,19 +109,5 @@ output "instance_types_info" {
   }
 }
 
-output "vm_configuration" {
-  description = "VM configuration from object type variable"
-  value = {
-    config        = var.vm_config
-    instance_type = var.vm_config.instance_type
-    ami_id        = var.vm_config.ami_id
-    monitoring    = var.vm_config.monitoring
-    type          = "object"
-  }
-  sensitive = false
-}
 
-output "all_resource_tags" {
-  description = "All tags applied to resources (merged common_tags + resource_tags)"
-  value       = local.common_tags
-}
+

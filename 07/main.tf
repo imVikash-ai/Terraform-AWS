@@ -1,7 +1,7 @@
 # ==============================================================================
 
 # EC2 Instance - Demonstrating all type constraints
-resource "aws_instance" "web_server" {
+resource "aws_instance" "web_server_vikash" {
   # String type: AMI ID and instance type
   ami           = "ami-0e8459476fed2e23b"
   instance_type = var.instance_type
@@ -35,7 +35,7 @@ resource "aws_instance" "web_server" {
 }
 
 # Security Group for EC2
-resource "aws_security_group" "web_sg" {
+resource "aws_security_group" "new_security_group" {
   # String type: Name and description
   name        = "${var.server_config.name}-sg"  # Object type usage
   description = "Security group for web server"
