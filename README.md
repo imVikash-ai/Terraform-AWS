@@ -1,3 +1,5 @@
+# INTRODUCTION TO TERRAFORM
+
 ### What is Infrastructure as Code?
 Provisioning your infrastructure through code instead of manual processes.
 
