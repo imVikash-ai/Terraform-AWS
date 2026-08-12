@@ -1973,7 +1973,7 @@ terraform destroy
 ```
 
 
-# 13: Static Website Hosting (Mini Project 1)
+# 14: Static Website Hosting (Mini Project 1)
 
 ## 🎯 Project Overview
 
