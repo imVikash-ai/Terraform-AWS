@@ -2086,3 +2086,416 @@ terraform destroy
 Type `yes` when prompted to confirm destruction.
 
 
+# 15: VPC and Peering (Mini Project 2)
+
+## Overview
+This demo showcases **AWS VPC Peering** by creating two VPCs in different AWS regions and establishing a peering connection between them. This allows resources in both VPCs to communicate with each other using private IP addresses.
+
+## Architecture
+```
+┌─────────────────────────────────────┐       ┌─────────────────────────────────────┐
+│     Primary VPC (us-east-1)         │       │    Secondary VPC (us-west-2)        │
+│     CIDR: 10.0.0.0/16               │       │    CIDR: 10.1.0.0/16                │
+│                                     │       │                                     │
+│  ┌───────────────────────────────┐  │       │  ┌───────────────────────────────┐  │
+│  │  Subnet: 10.0.1.0/24          │  │       │  │  Subnet: 10.1.1.0/24          │  │
+│  │  ┌─────────────────────────┐  │  │       │  │  ┌─────────────────────────┐  │  │
+│  │  │  EC2 Instance           │  │  │       │  │  │  EC2 Instance           │  │  │
+│  │  │  Private IP: 10.0.1.x   │  │  │       │  │  │  Private IP: 10.1.1.x   │  │  │
+│  │  └─────────────────────────┘  │  │       │  │  └─────────────────────────┘  │  │
+│  └───────────────────────────────┘  │       │  └───────────────────────────────┘  │
+│                                     │       │                                     │
+│  Internet Gateway                   │       │  Internet Gateway                   │
+└─────────────────┬───────────────────┘       └─────────────────┬───────────────────┘
+                  │                                             │
+                  └───────────────VPC Peering──────────────────┘
+```
+
+## What This Demo Creates
+
+### Networking Components
+1. **Two VPCs**:
+   - Primary VPC in us-east-1 (10.0.0.0/16)
+   - Secondary VPC in us-west-2 (10.1.0.0/16)
+
+2. **Subnets**:
+   - One public subnet in each VPC
+   - Configured with auto-assign public IP
+
+3. **Internet Gateways**:
+   - One for each VPC to allow internet access
+
+4. **Route Tables**:
+   - Custom route tables with routes to internet and peered VPC
+   - Routes for VPC peering traffic
+
+5. **VPC Peering Connection**:
+   - Cross-region peering between the two VPCs
+   - Automatic acceptance configured
+
+### Compute Resources
+1. **EC2 Instances**:
+   - One t2.micro instance in each VPC
+   - Running Amazon Linux 2
+   - Apache web server installed
+   - Custom web page showing VPC information
+
+2. **Security Groups**:
+   - SSH access from anywhere (port 22)
+   - ICMP (ping) allowed from peered VPC
+   - All TCP traffic allowed between VPCs
+
+## Prerequisites
+
+1. **AWS Account** with appropriate permissions
+2. **AWS CLI** configured with credentials
+3. **Terraform** installed (version >= 1.0)
+4. **SSH Key Pair** created in both regions (use the same name)
+
+### Creating SSH Key Pairs
+```bash
+# For us-east-1
+aws ec2 create-key-pair --key-name vpc-peering-demo --region us-east-1 --query 'KeyMaterial' --output text > vpc-peering-demo.pem
+
+# For us-west-2
+aws ec2 create-key-pair --key-name vpc-peering-demo --region us-west-2 --query 'KeyMaterial' --output text > vpc-peering-demo-west.pem
+
+
+## Testing VPC Peering
+
+After the infrastructure is created, you can test the VPC peering connection:
+
+### 1. Get Instance IPs
+```bash
+terraform output
+```
+
+### 2. Test Connectivity from Primary to Secondary
+```bash
+# SSH into Primary instance
+ssh -i vpc-peering-demo.pem ec2-user@<PRIMARY_PUBLIC_IP>
+
+# Ping the Secondary instance using its private IP
+ping <SECONDARY_PRIVATE_IP>
+
+# Test HTTP connectivity
+curl http://<SECONDARY_PRIVATE_IP>
+```
+
+### 3. Test Connectivity from Secondary to Primary
+```bash
+# SSH into Secondary instance
+ssh -i vpc-peering-demo.pem ec2-user@<SECONDARY_PUBLIC_IP>
+
+# Ping the Primary instance using its private IP
+ping <PRIMARY_PRIVATE_IP>
+
+# Test HTTP connectivity
+curl http://<PRIMARY_PRIVATE_IP>
+```
+
+## Key Concepts Demonstrated
+
+### 1. VPC Peering
+- Cross-region VPC peering connection
+- Peering connection requester and accepter
+- Automatic acceptance configuration
+
+### 2. Routing
+- Route tables with peering routes
+- Traffic routing between VPCs
+- Internet gateway routes
+
+### 3. Security
+- Security groups allowing cross-VPC traffic
+- ICMP and TCP rules
+- Proper egress rules
+
+### 4. Multi-Region Deployment
+- Using provider aliases for different regions
+- Cross-region resource dependencies
+- Regional AMI selection
+
+## Important Notes
+
+### CIDR Blocks
+- VPC CIDR blocks **must not overlap** for peering to work
+- Primary VPC: 10.0.0.0/16
+- Secondary VPC: 10.1.0.0/16
+
+### Costs
+This demo creates resources that incur AWS charges:
+- EC2 instances (t2.micro)
+- Data transfer between regions
+- VPC peering data transfer
+
+**Remember to destroy resources when done:**
+```bash
+terraform destroy
+```
+
+### Limitations
+- VPC peering is **not transitive** (if A peers with B, and B peers with C, A cannot communicate with C)
+- VPC peering does not support **edge-to-edge routing**
+- Maximum of **125** peering connections per VPC
+
+# 16: AWS IAM User Management with Terraform
+
+## Overview
+This demo demonstrates how to manage AWS IAM users, groups, and group memberships using Terraform and a CSV file as the data source. It's an AWS equivalent of Azure AD user management.
+
+## What Gets Created
+
+- **26 IAM Users** with console access
+- **3 IAM Groups** (Education, Managers, Engineers)
+- **Group Memberships** based on user attributes
+- **User Tags** with metadata (DisplayName, Department, JobTitle)
+
+## Prerequisites
+
+1. **AWS CLI** configured with credentials
+2. **Terraform** v1.0 or later
+3. **AWS Permissions**: IAM user creation and management permissions
+4. **S3 Bucket** for Terraform state (see setup below)
+
+## Quick Start
+
+### 1. Create S3 Backend Bucket
+
+```powershell
+aws s3 mb s3://my-terraform-state-bucket-piyushsachdeva --region us-east-1
+aws s3api put-bucket-versioning --bucket my-terraform-state-bucket-piyushsachdeva --versioning-configuration Status=Enabled
+```
+
+### 2. Initialize Terraform
+
+```powershell
+terraform init
+```
+
+### 3. Review Changes
+
+```powershell
+terraform plan
+```
+
+### 4. Apply Configuration
+
+```powershell
+terraform apply -auto-approve
+```
+
+### 5. Verify in AWS Console
+
+Go to [IAM Console](https://console.aws.amazon.com/iam/) and check:
+- **Users** section - 26 users created
+- **User groups** section - 3 groups with members
+
+
+## How It Works
+
+### Step 1: Read CSV File
+
+The `main.tf` file reads the `users.csv` file:
+
+```terraform
+locals {
+  users = csvdecode(file("users.csv"))
+}
+```
+
+### Step 2: Create IAM Users
+
+Users are created with a username format: `{first_initial}{lastname}` (e.g., `mscott`):
+
+```terraform
+resource "aws_iam_user" "users" {
+  for_each = { for user in local.users : user.first_name => user }
+  
+  name = lower("${substr(each.value.first_name, 0, 1)}${each.value.last_name}")
+  path = "/users/"
+  
+  tags = {
+    "DisplayName" = "${each.value.first_name} ${each.value.last_name}"
+    "Department"  = each.value.department
+    "JobTitle"    = each.value.job_title
+  }
+}
+```
+
+### Step 3: Enable Console Access
+
+Login profiles are created for console access with password reset required:
+
+```terraform
+resource "aws_iam_user_login_profile" "users" {
+  for_each = aws_iam_user.users
+  
+  user                    = each.value.name
+  password_reset_required = true
+}
+```
+
+### Step 4: Create Groups and Memberships
+
+Groups are created and users are dynamically assigned based on their department:
+
+```terraform
+resource "aws_iam_group" "education" {
+  name = "Education"
+  path = "/groups/"
+}
+
+resource "aws_iam_group_membership" "education_members" {
+  name  = "education-group-membership"
+  group = aws_iam_group.education.name
+  
+  users = [
+    for user in aws_iam_user.users : user.name 
+    if user.tags.Department == "Education"
+  ]
+}
+```
+
+## Outputs
+
+After applying, you can view the outputs:
+
+```powershell
+# View AWS Account ID
+terraform output account_id
+
+# View all user names
+terraform output user_names
+
+# View password information (sensitive)
+terraform output user_passwords
+```
+
+## User List
+
+The following users are created from `users.csv`:
+
+| Username | Full Name | Department | Job Title |
+|----------|-----------|------------|-----------|
+| mscott | Michael Scott | Education | Regional Manager |
+| dschrute | Dwight Schrute | Sales | Assistant to the Regional Manager |
+| jhalpert | Jim Halpert | Sales | Sales Representative |
+| pbeesly | Pam Beesly | Reception | Receptionist |
+| rhoward | Ryan Howard | Temps | Temp |
+| ... and 21 more users |
+
+## Groups and Memberships
+
+### Education Group
+- Michael Scott (mscott)
+
+### Managers Group
+Users with "Manager" or "CEO" in their job title:
+- Michael Scott (mscott)
+- Robert California (rcalifornia)
+- Darryl Philbin (dphilbin)
+- David Wallace (dwallace)
+- Jo Bennett (jbennett)
+
+### Engineers Group
+- Currently empty (no users with "Engineering" department in CSV)
+
+## Customization
+
+### Add More Users
+
+Edit `users.csv` and add new rows:
+
+```csv
+first_name,last_name,department,job_title
+Jane,Doe,Engineering,Software Engineer
+```
+
+Then run:
+
+```powershell
+terraform apply
+```
+
+### Add IAM Policies to Groups
+
+Add to `groups.tf`:
+
+```terraform
+resource "aws_iam_group_policy_attachment" "education_readonly" {
+  group      = aws_iam_group.education.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+```
+
+### Change Username Format
+
+Modify the `name` attribute in `main.tf`:
+
+```terraform
+# Current: {first_initial}{lastname} (e.g., mscott)
+name = lower("${substr(each.value.first_name, 0, 1)}${each.value.last_name}")
+
+# Alternative: {firstname}.{lastname} (e.g., michael.scott)
+name = lower("${each.value.first_name}.${each.value.last_name}")
+```
+
+## Password Management
+
+AWS doesn't return auto-generated passwords without PGP encryption. To set passwords:
+
+### Option 1: AWS Console
+1. Go to IAM Console
+2. Select a user
+3. Click "Security credentials"
+4. Click "Enable console access" or "Manage console access"
+5. Set a password
+
+### Option 2: AWS CLI
+
+```powershell
+aws iam create-login-profile --user-name mscott --password "TempPassword123!" --password-reset-required
+```
+
+## Cleanup
+
+To remove all created resources:
+
+```powershell
+terraform destroy
+```
+
+**Warning:** This will delete all users, groups, and memberships.
+
+## Troubleshooting
+
+### Error: Backend Access Denied
+
+Check your AWS credentials:
+
+```powershell
+aws sts get-caller-identity
+```
+
+### Error: User Already Exists
+
+Import existing user into state:
+
+```powershell
+terraform import aws_iam_user.users[\"Michael\"] mscott
+```
+
+Or delete the existing user:
+
+```powershell
+aws iam delete-login-profile --user-name mscott
+aws iam delete-user --user-name mscott
+```
+
+### View Terraform State
+
+```powershell
+terraform state list
+terraform state show aws_iam_user.users[\"Michael\"]
+```
